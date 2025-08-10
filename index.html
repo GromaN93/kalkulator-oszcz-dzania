@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kalkulator oszczędności na lokacie</title>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: #e0f7fa;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    }
+
+    .container {
+      background: linear-gradient(145deg, #003f5c, #2f4b7c);
+      border-radius: 15px;
+      padding: 25px;
+      max-width: 900px;
+      width: 100%;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: 600;
+      font-size: 1.1em;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 15px;
+      margin-top: 5px;
+      border-radius: 8px;
+      border: none;
+      font-size: 1em;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    button {
+      margin-top: 25px;
+      padding: 15px 30px;
+      font-size: 1.1em;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(90deg, #00b09b, #96c93d);
+      color: #004d40;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    button:hover {
+      background: linear-gradient(90deg, #96c93d, #00b09b);
+      color: #e0f7fa;
+    }
+
+    .result-card {
+      margin-top: 30px;
+      background: linear-gradient(145deg, #004d40, #00796b);
+      border-radius: 15px;
+      padding: 20px;
+      color: #b2dfdb;
+      font-weight: 700;
+      font-size: 1.3em;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+
+    table {
+      width: 100%;
+      margin-top: 30px;
+      border-collapse: collapse;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+      background: #003f5c;
+    }
+
+    thead tr {
+      background: #00796b;
+      color: #e0f7fa;
+      font-weight: 700;
+      font-size: 1.1em;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: #004d40;
+    }
+    tbody tr:nth-child(even) {
+      background: #00695c;
+    }
+
+    th, td {
+      padding: 12px 15px;
+      text-align: center;
+    }
+
+    /* Grafik-finansowy SVG w tle */
+    .finance-graphic {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 150px;
+      opacity: 0.1;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .container {
+        padding: 15px;
+      }
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <svg class="finance-graphic" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" >
+    <path fill="#96c93d" d="M8 56h48v4H8z"/>
+    <path fill="#00b09b" d="M16 40h32v16H16z"/>
+    <path fill="#96c93d" d="M24 32h16v8H24z"/>
+    <path fill="#00b09b" d="M30 24h4v8h-4z"/>
+  </svg>
+
+  <h1>Kalkulator oszczędności na lokacie</h1>
+
+  <div class="container">
+    <label for="monthlyDeposit">Kwota regularnej wpłaty (zł):</label>
+    <input type="number" id="monthlyDeposit" min="1" value="40000" step="100" />
+
+    <label for="annualInterest">Roczna stopa procentowa (%):</label>
+    <input type="number" id="annualInterest" min="0" max="100" value="4.5" step="0.01" />
+
+    <label for="years">Liczba lat oszczędzania:</label>
+    <input type="number" id="years" min="1" max="50" value="10" />
+
+    <button id="calculateBtn">Oblicz oszczędności</button>
+
+    <div class="result-card" id="resultCard" style="display:none;"></div>
+
+    <table id="resultTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>Rok</th>
+          <th>Saldo po kapitalizacji (zł)</th>
+          <th>Odsetki (netto, zł)</th>
+          <th>Kwota całkowita (zł)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <canvas id="lineChart" style="margin-top: 30px;"></canvas>
+  </div>
+
+  <script>
+    const calculateBtn = document.getElementById('calculateBtn');
+    const resultCard = document.getElementById('resultCard');
+    const resultTable = document.getElementById('resultTable');
+    const tbody = resultTable.querySelector('tbody');
+    const ctx = document.getElementById('lineChart').getContext('2d');
+    let chart;
+
+    function calculateSavings(deposit, interestRate, years) {
+  let saldo = 0;
+  const yearlyData = [];
+
+  for (let year = 1; year <= years; year++) {
+    // Najpierw dodajemy wpłatę na początku roku
+    saldo += deposit;
+
+    // Liczymy odsetki od nowego salda
+    const odsetkiBrutto = saldo * (interestRate / 100);
+    const podatekBelki = odsetkiBrutto * 0.19;
+    const odsetkiNetto = odsetkiBrutto - podatekBelki;
+
+    // Dodajemy odsetki netto do salda
+    saldo += odsetkiNetto;
+
+    yearlyData.push({
+      year,
+      saldo,
+      odsetkiNetto,
+      podatekBelki,
+      odsetkiBrutto,
+      kwotaCalkowita: saldo
+    });
+  }
+
+  return yearlyData;
+}
+
+
+    function formatPLN(value) {
+      return value.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' });
+    }
+
+    function renderResults(data) {
+      // Pokaż wynik końcowy
+      const last = data[data.length - 1];
+      resultCard.style.display = 'block';
+      resultCard.textContent = `Po ${last.year} latach oszczędności masz: ${formatPLN(last.saldo)}`;
+
+      // Wypełnij tabelę
+      tbody.innerHTML = '';
+      data.forEach(({year, saldo, odsetkiNetto}) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${year}</td>
+          <td>${formatPLN(saldo)}</td>
+          <td>${formatPLN(odsetkiNetto)}</td>
+          <td>${formatPLN(saldo)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      resultTable.style.display = 'table';
+
+      // Wykres liniowy rok do roku saldo
+      const labels = data.map(d => `Rok ${d.year}`);
+      const saldoData = data.map(d => +d.saldo.toFixed(2));
+
+      if(chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Saldo oszczędności (zł)',
+            data: saldoData,
+            borderColor: '#96c93d',
+            backgroundColor: 'rgba(150,201,61,0.3)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: val => val.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })
+              },
+              grid: {
+                color: 'rgba(150,201,61,0.2)'
+              }
+            },
+            x: {
+              grid: {
+                color: 'rgba(150,201,61,0.1)'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#b2dfdb', font: { size: 14, weight: 'bold' } }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => formatPLN(ctx.parsed.y)
+              }
+            }
+          }
+        }
+      });
+    }
+
+    calculateBtn.addEventListener('click', () => {
+      const deposit = parseFloat(document.getElementById('monthlyDeposit').value);
+      const interest = parseFloat(document.getElementById('annualInterest').value);
+      const years = parseInt(document.getElementById('years').value);
+
+      if (isNaN(deposit) || deposit <= 0) {
+        alert('Proszę podać poprawną kwotę wpłaty.');
+        return;
+      }
+      if (isNaN(interest) || interest < 0) {
+        alert('Proszę podać poprawną stopę procentową.');
+        return;
+      }
+      if (isNaN(years) || years <= 0) {
+        alert('Proszę podać poprawną liczbę lat.');
+        return;
+      }
+
+      const data = calculateSavings(deposit, interest, years);
+      renderResults(data);
+    });
+
+    // Inicjalny wynik
+    calculateBtn.click();
+  </script>
+</body>
+</html>
